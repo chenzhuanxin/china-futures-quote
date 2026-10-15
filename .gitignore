@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# PyInstaller 构建产物（exe 通过 GitHub Release 发布，不入库）
+build/
+dist/
+*.spec
+
+# 临时诊断文件
+_env.txt
+_exe.txt
+_tmp*.txt
