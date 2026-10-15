@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>纯碱 SA2701 · 期货行情面板</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script>window.echarts||document.write('<script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"><\/script>');</script>
+<style>
+  :root{
+    --bg:#0e1420; --panel:#151d2c; --panel2:#1a2436; --line:#263249;
+    --txt:#dfe7f3; --sub:#8fa1bb; --up:#ef4c5a; --down:#2fbf8f; --accent:#3fa9f5;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:"Microsoft YaHei",-apple-system,Segoe UI,Roboto,sans-serif;font-size:13px}
+  .wrap{max-width:1360px;margin:0 auto;padding:10px 14px 30px}
+  /* 头部 */
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:6px 2px}
+  header h1{font-size:19px;font-weight:700}
+  header h1 small{font-size:12px;color:var(--sub);font-weight:400;margin-left:6px}
+  .src{font-size:11px;color:var(--sub)}
+  .refresh{font-size:11px;color:var(--sub);cursor:pointer;border:1px solid var(--line);padding:3px 10px;border-radius:4px;background:var(--panel)}
+  .refresh:hover{color:var(--accent);border-color:var(--accent)}
+  /* 品种选择栏 */
+  .vbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0;padding:8px 12px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+  .vbar .vt{color:var(--sub);font-size:12px;font-weight:600}
+  .vsel{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:13px;min-width:200px}
+  .vsel:focus{outline:none;border-color:var(--accent)}
+  #vInfo{font-size:12px;color:var(--sub)}
+  /* 实时行情条 */
+  .quote{margin:6px 0;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 16px}
+  .quote .row1{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+  .q-price{font-size:34px;font-weight:800;line-height:1}
+  .q-chg{font-size:16px;font-weight:600}
+  .q-pct{font-size:16px;font-weight:600}
+  .q-time{font-size:12px;color:var(--sub);margin-left:auto}
+  .q-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:7px 14px;margin-top:12px}
+  .q-field{background:var(--panel2);border-radius:6px;padding:6px 10px}
+  .q-field .lb{color:var(--sub);font-size:11px;margin-bottom:2px}
+  .q-field .vl{font-size:15px;font-weight:600}
+  .q-field .vl.bsell{color:var(--up)} .q-field .vl.bbuy{color:var(--down)}
+  .up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--txt)}
+  /* 主体：左图 + 右合约 */
+  .main{display:flex;gap:10px;margin-top:6px;align-items:stretch}
+  .left{flex:1;min-width:0;display:flex;flex-direction:column}
+  .right{width:208px;flex:0 0 208px;background:var(--panel);border:1px solid var(--line);border-radius:8px;display:flex;flex-direction:column;overflow:hidden}
+  .right .rhead{padding:9px 12px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .right .rhead .t{font-weight:700;font-size:14px}
+  .right .rhead .s{font-size:11px;color:var(--sub);margin-top:2px}
+  .right .clist{flex:1;overflow-y:auto;padding:6px}
+  .citem{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:6px;cursor:pointer;border:1px solid transparent}
+  .citem:hover{background:var(--panel2)}
+  .citem.active{background:#1d2a44;border-color:var(--accent)}
+  .citem .cs{font-weight:700;font-size:14px}
+  .citem .cv{text-align:right}
+  .citem .cv .p{font-size:13px;font-weight:600}
+  .citem .cv .ch{font-size:11px;color:var(--sub)}
+  /* 周期 */
+  .periods{margin:8px 0 6px;display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+  .pbtn{cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--txt);border-radius:6px;padding:5px 11px;font-size:13px}
+  .pbtn:hover{border-color:var(--accent)}
+  .pbtn.active{background:var(--accent);border-color:var(--accent);color:#06233f;font-weight:700}
+  /* 图表区（相对定位，承载两个悬浮指标选择器） */
+  .chartWrap{position:relative;width:100%;height:700px;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  #chart{width:100%;height:100%}
+  .ind-sel{position:absolute;z-index:10;background:rgba(21,29,44,.92);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+  .ind-sel:focus{outline:none;border-color:var(--accent)}
+  #mainIndSel{top:8px;right:14px}
+  #sub2Sel{top:73.5%;right:14px}
+  .ind-sel.hidden{display:none}
+  .foot{margin-top:10px;color:var(--sub);font-size:11px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="staticHint" style="display:none;background:#7a4b1f;color:#ffe9c9;padding:8px 14px;border-radius:8px;font-size:13px;margin-bottom:8px;line-height:1.6">
+    ⚠ 当前页面由 <b>GitHub Pages 静态托管</b>，无法运行行情后端，图表为占位展示。<br>
+    实时行情请下载本仓库 <b>Releases</b> 中的 <b>FuturesQuote.exe</b>（或 <code>python server.py</code>）本地运行后，访问 <b>http://127.0.0.1:8100</b>。
+  </div>
+  <header>
+    <h1 id="headTitle">纯碱 SA2701 <small id="headName">期货行情面板</small></h1>
+    <span class="src">数据源：新浪财经（延迟/分钟级）</span>
+    <span class="src" id="updTime"></span>
+    <span class="refresh" id="btnRefresh">刷新</span>
+    <span class="refresh" id="btnAuto">自动刷新：开</span>
+  </header>
+
+  <!-- 品种选择 -->
+  <div class="vbar">
+    <span class="vt">品种</span>
+    <select id="varietySel" class="vsel" title="选择国内期货品种"></select>
+    <span id="vInfo"></span>
+  </div>
+
+  <!-- 实时行情 -->
+  <div class="quote">
+    <div class="row1">
+      <span class="q-price" id="qPrice">--</span>
+      <span class="q-chg" id="qChg">--</span>
+      <span class="q-pct" id="qPct">--</span>
+      <span class="q-time" id="qTime"></span>
+    </div>
+    <div class="q-fields">
+      <div class="q-field"><div class="lb">最新价</div><div class="vl" id="qLast">--</div></div>
+      <div class="q-field"><div class="lb">开盘价</div><div class="vl" id="qOpen">--</div></div>
+      <div class="q-field"><div class="lb">最高价</div><div class="vl up" id="qHigh">--</div></div>
+      <div class="q-field"><div class="lb">最低价</div><div class="vl down" id="qLow">--</div></div>
+      <div class="q-field"><div class="lb">结算价</div><div class="vl" id="qSettle">--</div></div>
+      <div class="q-field"><div class="lb">昨结算</div><div class="vl" id="qPS">--</div></div>
+      <div class="q-field"><div class="lb">持仓量</div><div class="vl" id="qPos">--</div></div>
+      <div class="q-field"><div class="lb">成交量</div><div class="vl" id="qVol">--</div></div>
+      <div class="q-field"><div class="lb">买 价</div><div class="vl bbuy" id="qBuy1">--</div></div>
+      <div class="q-field"><div class="lb">卖 价</div><div class="vl bsell" id="qSell1">--</div></div>
+      <div class="q-field"><div class="lb">买 量</div><div class="vl bbuy" id="qBuyVol">--</div></div>
+      <div class="q-field"><div class="lb">卖 量</div><div class="vl bsell" id="qSellVol">--</div></div>
+    </div>
+  </div>
+
+  <!-- 周期 -->
+  <div class="periods" id="periods"></div>
+
+  <div class="main">
+    <!-- 左侧：图表 -->
+    <div class="left">
+      <div class="chartWrap">
+        <div id="chart"></div>
+        <select class="ind-sel" id="mainIndSel" title="主图指标"></select>
+        <select class="ind-sel" id="sub2Sel" title="副图二指标"></select>
+      </div>
+      <div class="foot">
+        <div>· 副图一：成交量 + 持仓量（柱线+折线）。主图指标可叠加 MA / SAR / BOLL / EXPMA / BBIBOLL；副图二可切换 MACD / KDJ / RSI / BOLL / WR / DMI。</div>
+        <div>· 周K / 月K / 年K 由日K合成；120分钟K来自新浪分钟接口。数据仅供学习参考，不构成投资建议。</div>
+      </div>
+    </div>
+    <!-- 右侧：同品种合约列表 -->
+    <div class="right">
+      <div class="rhead">
+        <div class="t" id="rVarName">各月份合约</div>
+        <div class="s" id="rVarSub">纯碱 SA · 在交易</div>
+      </div>
+      <div class="clist" id="clist"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   状态
+===================================================================== */
+const STATE = {
+  variety: "SA",
+  symbol: "SA2701",
+  period: "day",          // line|1|5|15|30|60|120|day|week|month|year
+  mainInd: "MA",          // none|MA|SAR|BOLL|EXPMA|BBIBOLL  （主图叠加）
+  sub2: "MACD",           // none|MACD|KDJ|RSI|BOLL|WR|DMI   （副图二）
+  auto: true
+};
+const VARIETY_NAME = {};   // 品种代码 -> 中文名
+const VARIETY_EX = {};     // 品种代码 -> 交易所名
+const PERIOD_BTNS = [
+  ["line","分时"],["1","1分"],["5","5分"],["15","15分"],["30","30分"],
+  ["60","60分"],["120","120分"],["day","日K"],["week","周K"],["month","月K"],["year","年K"]
+];
+const MAIN_IND = [["none","无"],["MA","MA"],["SAR","SAR"],["BOLL","BOLL"],["EXPMA","EXPMA"],["BBIBOLL","BBIBOLL"]];
+const SUB2_IND = [["none","无"],["MACD","MACD"],["KDJ","KDJ"],["RSI","RSI"],["BOLL","BOLL"],["WR","WR"],["DMI","DMI"]];
+const UP="#ef4c5a", DOWN="#2fbf8f";
+let chart=null, quoteTimer=null, chartTimer=null;
+
+function $(id){return document.getElementById(id);}
+function nf(v,d=2){ if(v==null||isNaN(v))return "--"; return Number(v).toFixed(d);}
+function big(v){ if(v==null||isNaN(v))return "--"; if(Math.abs(v)>=1e8)return (v/1e8).toFixed(2)+"亿"; if(Math.abs(v)>=1e4)return (v/1e4).toFixed(1)+"万"; return ""+Math.round(v);}
+function cls(v){ if(v==null||v===0)return "flat"; return v>0?"up":"down";}
+function sign(v){ if(v==null)return "--"; return (v>0?"+":"")+nf(v);}
+async function api(path){ const r=await fetch(path); return r.json(); }
+
+/* =====================================================================
+   主图指标：MA / SAR / BOLL / EXPMA / BBIBOLL
+===================================================================== */
+function maArr(c,n){ const o=new Array(c.length).fill(null); let s=0; for(let i=0;i<c.length;i++){ s+=c[i]; if(i>=n) s-=c[i-n]; if(i>=n-1) o[i]=s/n; } return o; }
+function emaArr(a,n){ const o=new Array(a.length).fill(null); let k=2/(n+1),prev=a[0]; o[0]=prev; for(let i=1;i<a.length;i++){prev=a[i]*k+prev*(1-k);o[i]=prev;} return o; }
+function bollArr(c,n=20,k=2){ const mid=[],up=[],lo=[]; for(let i=0;i<c.length;i++){ if(i<n-1){mid.push(null);up.push(null);lo.push(null);continue;} let s=0; for(let j=i-n+1;j<=i;j++)s+=c[j]; const m=s/n; let v=0; for(let j=i-n+1;j<=i;j++)v+=(c[j]-m)*(c[j]-m); const sd=Math.sqrt(v/n); mid.push(m);up.push(m+k*sd);lo.push(m-k*sd);} return {mid,up,lo}; }
+function sarArr(kl,step=0.02,max=0.2){ const n=kl.length,sar=new Array(n).fill(null); if(n<2)return sar; let isLong = kl[1].close >= kl[0].close; let ep, af=step, prevSar, hi, lo; if(isLong){ ep=Math.max(kl[0].high,kl[1].high); prevSar=Math.min(kl[0].low,kl[1].low);} else { ep=Math.min(kl[0].low,kl[1].low); prevSar=Math.max(kl[0].high,kl[1].high);} for(let i=1;i<n;i++){ hi=kl[i].high; lo=kl[i].low; let s=prevSar+af*(ep-prevSar); if(isLong){ s=Math.min(s,kl[i-1].low); if(i>1)s=Math.min(s,kl[i-2].low); if(lo<s){ isLong=false; sar[i]=ep; ep=lo; af=step; prevSar=sar[i]; continue; } if(hi>ep){ ep=hi; af=Math.min(af+step,max);} } else { s=Math.max(s,kl[i-1].high); if(i>1)s=Math.max(s,kl[i-2].high); if(hi>s){ isLong=true; sar[i]=ep; ep=hi; af=step; prevSar=sar[i]; continue; } if(lo<ep){ ep=lo; af=Math.min(af+step,max);} } sar[i]=s; prevSar=s; } return sar; }
+function bbibollArr(c,n=6,m=3){ const bbi=new Array(c.length).fill(null),up=[],lo=[]; const ma3=maArr(c,3),ma6=maArr(c,6),ma12=maArr(c,12),ma24=maArr(c,24); for(let i=0;i<c.length;i++){ if(ma24[i]==null){up.push(null);lo.push(null);continue;} const b=(ma3[i]+ma6[i]+ma12[i]+ma24[i])/4; bbi[i]=b; let s=0; const cnt=Math.min(n,i+1); for(let j=i-cnt+1;j<=i;j++)s+=bbi[j]; const mean=s/cnt; let v=0; for(let j=i-cnt+1;j<=i;j++)v+=(bbi[j]-mean)**2; const sd=Math.sqrt(v/cnt); up.push(b+m*sd); lo.push(b-m*sd);} return {bbi,up,lo}; }
+
+/* =====================================================================
+   副图二指标：MACD / KDJ / RSI / BOLL / WR / DMI
+===================================================================== */
+function macdArr(c){ const e12=emaArr(c,12),e26=emaArr(c,26); const dif=c.map((v,i)=>v!=null&&e12[i]!=null&&e26[i]!=null?e12[i]-e26[i]:null); const dea=emaArr(dif.map(x=>x||0),9); const macd=dif.map((v,i)=>v!=null&&dea[i]!=null?(v-dea[i])*2:null); return {dif,dea,macd}; }
+function kdjArr(kl){ const n=9,K=[],D=[],J=[]; let k=50,d=50; for(let i=0;i<kl.length;i++){ let s=Math.max(0,i-n+1),hh=-Infinity,ll=Infinity; for(let j=s;j<=i;j++){hh=Math.max(hh,kl[j].high);ll=Math.min(ll,kl[j].low);} let rsv=(hh===ll)?50:(kl[i].close-ll)/(hh-ll)*100; k=(2/3)*k+(1/3)*rsv; d=(2/3)*d+(1/3)*k; K.push(k);D.push(d);J.push(3*k-2*d);} return {K,D,J}; }
+function rsiArr(c,n){ const o=new Array(c.length).fill(null); let g=0,l=0; for(let i=1;i<c.length;i++){ const ch=c[i]-c[i-1]; g+=Math.max(0,ch); l+=Math.max(0,-ch); if(i<n){ if(i===n-1)o[i]= l===0?100:100*g/(g+l);} else if(i>=n){ g=(g*(n-1)+Math.max(0,c[i]-c[i-1]))/n; l=(l*(n-1)+Math.max(0,c[i-1]-c[i]))/n; o[i]= l===0?100:100*g/(g+l);} } return o; }
+function wrArr(kl,n){ const o=[]; for(let i=0;i<kl.length;i++){ let s=Math.max(0,i-n+1),hh=-Infinity,ll=Infinity; for(let j=s;j<=i;j++){hh=Math.max(hh,kl[j].high);ll=Math.min(ll,kl[j].low);} o.push(hh===ll?-50:(hh-kl[i].close)/(hh-ll)*100);} return o; }
+function wilder(a,n){ const o=new Array(a.length).fill(0); let s=0; for(let i=0;i<a.length;i++){ if(i<n){s+=a[i]; if(i===n-1)o[i]=s/n;} else o[i]=(o[i-1]*(n-1)+a[i])/n;} return o; }
+function dmiArr(kl,n=14){ const tr=[],pdm=[],mdm=[]; for(let i=0;i<kl.length;i++){ if(i===0){tr.push(0);pdm.push(0);mdm.push(0);continue;} const h=kl[i].high,l=kl[i].low,pc=kl[i-1].close,ph=kl[i-1].high,pl=kl[i-1].low; tr.push(Math.max(h-l,Math.abs(h-pc),Math.abs(l-pc))); const up=h-ph,dn=pl-l; pdm.push((up>dn&&up>0)?up:0); mdm.push((dn>up&&dn>0)?dn:0);} const str=wilder(tr,n),sp=wilder(pdm,n),sm=wilder(mdm,n); const pdi=sp.map((v,i)=>str[i]?100*v/str[i]:0), mdi=sm.map((v,i)=>str[i]?100*v/str[i]:0); const dx=pdi.map((v,i)=>(v+mdi[i])?100*Math.abs(v-mdi[i])/(v+mdi[i]):0); const adx=wilder(dx,n); const adxr=adx.map((v,i)=>i>=n&&adx[i-n]!=null?(v+adx[i-n])/2:null); return {pdi,mdi,adx,adxr}; }
+
+/* =====================================================================
+   实时行情
+===================================================================== */
+async function loadQuote(){
+  try{
+    const j=await api("/api/quote?symbol="+STATE.symbol);
+    if(!j||!j.ok||!j.data)return;
+    const d=j.data, c=cls(d.change);
+    $("qPrice").textContent=nf(d.price); $("qPrice").className="q-price "+c;
+    $("qChg").textContent=sign(d.change); $("qChg").className="q-chg "+c;
+    $("qPct").textContent=sign(d.change_pct)+"%"; $("qPct").className="q-pct "+c;
+    $("qTime").textContent=d.update||"";
+    $("qLast").textContent=nf(d.price);
+    $("qOpen").textContent=nf(d.open); $("qHigh").textContent=nf(d.high); $("qLow").textContent=nf(d.low);
+    $("qSettle").textContent=nf(d.settle); $("qPS").textContent=nf(d.prev_settle);
+    $("qPos").textContent=big(d.position); $("qVol").textContent=big(d.volume);
+    $("qBuy1").textContent=nf(d.buy1); $("qSell1").textContent=nf(d.sell1);
+    $("qBuyVol").textContent=big(d.buy_vol); $("qSellVol").textContent=big(d.sell_vol);
+    $("updTime").textContent="更新 "+(d.update||"");
+  }catch(e){}
+}
+
+/* =====================================================================
+   合约列表（右侧栏，参照新浪：名称 / 最新价 / 涨跌幅）
+===================================================================== */
+async function loadContracts(){
+  // 右侧合约列表：按交割月时间顺序，自动选主力（成交量最大）为默认
+  try{
+    const j=await api("/api/contracts?variety="+STATE.variety);
+    if(!j||!j.ok||!j.contracts||!j.contracts.length)return;
+    let main=j.contracts[0];
+    j.contracts.forEach(c=>{ if((c.volume||0)>(main.volume||0)) main=c; });
+    // 若当前合约不属于该品种，切到主力
+    if(STATE.symbol.replace(/[0-9]/g,"")!==STATE.variety || !j.contracts.some(c=>c.symbol===STATE.symbol)){
+      STATE.symbol=main.symbol;
+    }
+    const list=$("clist"); list.innerHTML="";
+    j.contracts.forEach(c=>{
+      const isMain=c.symbol===main.symbol;
+      const div=document.createElement("div");
+      div.className="citem"+(c.symbol===STATE.symbol?" active":"");
+      div.title=(isMain?"[主力] ":"")+c.symbol+"  成交量 "+big(c.volume)+"  持仓 "+big(c.position);
+      div.innerHTML='<span class="cs">'+c.symbol+(isMain?'<em style="font-style:normal;color:#3fa9f5;font-size:10px;margin-left:2px">主力</em>':'')+'</span>'+
+        '<span class="cv"><span class="p '+cls(c.change_pct)+'">'+(c.close==null?"--":nf(c.close))+'</span>'+
+        '<span class="ch">'+(c.change_pct==null?"--":sign(c.change_pct)+"%")+'</span></span>';
+      div.onclick=()=>{ if(c.symbol!==STATE.symbol){ STATE.symbol=c.symbol; loadContracts(); loadQuote(); loadChart(); } };
+      list.appendChild(div);
+    });
+  }catch(e){}
+}
+
+function updateHead(){
+  const name=VARIETY_NAME[STATE.variety]||STATE.variety;
+  $("headTitle").innerHTML=name+" "+STATE.symbol+" <small id='headName'>期货行情面板</small>";
+  const ex=VARIETY_EX[STATE.variety]||"";
+  $("vInfo").textContent=STATE.variety+" · "+(VARIETY_NAME[STATE.variety]||"")+(ex?" · "+ex:"");
+}
+
+async function buildVarietySelect(){
+  const sel=$("varietySel"); sel.innerHTML="";
+  try{
+    const j=await api("/api/varieties");
+    if(!j||!j.ok){ showStaticHint(); return; }
+    j.groups.forEach(g=>{
+      const og=document.createElement("optgroup"); og.label=g.ex_name;
+      g.items.forEach(it=>{
+        VARIETY_NAME[it.code]=it.name; VARIETY_EX[it.code]=g.ex_name;
+        const o=document.createElement("option"); o.value=it.code; o.textContent=it.name+" ("+it.code+")";
+        if(it.code===STATE.variety)o.selected=true; og.appendChild(o);
+      });
+      sel.appendChild(og);
+    });
+  }catch(e){ showStaticHint(); }
+  sel.onchange=e=>switchVariety(e.target.value);
+}
+
+function showStaticHint(){
+  // 静态托管（如 GitHub Pages）无后端 API 时，提示如何本地运行
+  const el=$("staticHint"); if(el)el.style.display="block";
+  const sel=$("varietySel"); if(sel&&sel.options.length===0){
+    const o=document.createElement("option"); o.textContent="（静态托管，请本地运行后使用）"; sel.appendChild(o);
+  }
+}
+
+async function switchVariety(code){
+  if(code===STATE.variety)return;
+  STATE.variety=code;
+  await loadContracts();          // 确定主力并设 STATE.symbol
+  updateHead();
+  loadQuote(); loadChart(); restartTimers();
+}
+
+/* =====================================================================
+   周期 + 主图/副图二 指标选择
+===================================================================== */
+function buildControls(){
+  // 周期按钮
+  const bar=$("periods"); bar.innerHTML="";
+  PERIOD_BTNS.forEach(([k,t])=>{
+    const b=document.createElement("button");
+    b.className="pbtn"+(k===STATE.period?" active":"");
+    b.textContent=t; b.onclick=()=>{ STATE.period=k; buildControls(); loadChart(); };
+    bar.appendChild(b);
+  });
+  // 主图指标选择
+  const ms=$("mainIndSel"); ms.innerHTML="";
+  MAIN_IND.forEach(([k,t])=>{
+    const o=document.createElement("option"); o.value=k; o.textContent=t; if(k===STATE.mainInd)o.selected=true; ms.appendChild(o);
+  });
+  ms.onchange=e=>{ STATE.mainInd=e.target.value; loadChart(); };
+  // 副图二指标选择
+  const ss=$("sub2Sel"); ss.innerHTML="";
+  SUB2_IND.forEach(([k,t])=>{
+    const o=document.createElement("option"); o.value=k; o.textContent=t; if(k===STATE.sub2)o.selected=true; ss.appendChild(o);
+  });
+  ss.onchange=e=>{ STATE.sub2=e.target.value; loadChart(); };
+  // 分时无主图指标/副图二，隐藏两个选择器
+  const isLine = STATE.period==="line";
+  ms.classList.toggle("hidden", isLine);
+  ss.classList.toggle("hidden", isLine);
+}
+
+/* =====================================================================
+   主图叠加指标 series（返回数组，空数组表示不叠加）
+===================================================================== */
+function mainOverlaySeries(klines){
+  const c=klines.map(k=>k.close), ind=STATE.mainInd;
+  const S=[]; const L=(name,data,color,width=1)=>({name,type:"line",data,showSymbol:false,lineStyle:{width,color},xAxisIndex:0,yAxisIndex:0,emphasis:{disabled:true}});
+  if(ind==="MA"){
+    S.push(L("MA5",maArr(c,5),"#f5c542"),L("MA10",maArr(c,10),"#3fa9f5"),L("MA20",maArr(c,20),"#c66bff"),L("MA60",maArr(c,60),"#6f9fe8"));
+  }else if(ind==="SAR"){
+    S.push(L("SAR",sarArr(klines),"#f5c542",1.2));
+  }else if(ind==="BOLL"){
+    const b=bollArr(c);
+    S.push(L("BOLL上轨",b.up,"#8fa1bb"),L("BOLL中轨",b.mid,"#f5c542"),L("BOLL下轨",b.lo,"#c66bff"));
+  }else if(ind==="EXPMA"){
+    S.push(L("EXPMA12",emaArr(c,12),"#f5c542"),L("EXPMA50",emaArr(c,50),"#3fa9f5"));
+  }else if(ind==="BBIBOLL"){
+    const b=bbibollArr(c);
+    S.push(L("BBIBOLL上轨",b.up,"#8fa1bb"),L("BBI",b.bbi,"#f5c542"),L("BBIBOLL下轨",b.lo,"#c66bff"));
+  }
+  return S;
+}
+
+/* =====================================================================
+   副图二指标 series
+===================================================================== */
+function sub2Series(klines){
+  const c=klines.map(k=>k.close), ind=STATE.sub2, S=[];
+  const L=(name,data,color,width=1)=>({name,type:"line",data,showSymbol:false,lineStyle:{width,color},xAxisIndex:2,yAxisIndex:3,emphasis:{disabled:true}});
+  if(ind==="MACD"){
+    const m=macdArr(c);
+    S.push(L("DIF",m.dif,"#fff"),L("DEA",m.dea,"#f5c542"),
+      {name:"MACD",type:"bar",data:m.macd.map(v=>v==null?null:{value:v,itemStyle:{color:v>=0?UP:DOWN}}),xAxisIndex:2,yAxisIndex:3,barWidth:"55%"});
+  }else if(ind==="KDJ"){
+    const k=kdjArr(klines); S.push(L("K",k.K,"#fff"),L("D",k.D,"#f5c542"),L("J",k.J,"#c66bff"));
+  }else if(ind==="RSI"){
+    S.push(L("RSI6",rsiArr(c,6),"#fff"),L("RSI12",rsiArr(c,12),"#f5c542"),L("RSI24",rsiArr(c,24),"#c66bff"));
+  }else if(ind==="BOLL"){
+    const b=bollArr(c); S.push(L("BOLL上轨",b.up,"#fff"),L("BOLL中轨",b.mid,"#f5c542"),L("BOLL下轨",b.lo,"#c66bff"));
+  }else if(ind==="WR"){
+    S.push(L("WR6",wrArr(klines,6),"#fff"),L("WR10",wrArr(klines,10),"#f5c542"));
+  }else if(ind==="DMI"){
+    const d=dmiArr(klines); S.push(L("+DI",d.pdi,"#fff"),L("-DI",d.mdi,"#f5c542"),L("ADX",d.adx,"#c66bff"),L("ADXR",d.adxr,"#4fe3c1"));
+  }
+  return S;
+}
+
+/* =====================================================================
+   K线渲染
+===================================================================== */
+async function loadChart(){
+  if(STATE.period==="line"){ await loadLine(); return; }
+  const j=await api("/api/kline?symbol="+STATE.symbol+"&period="+STATE.period);
+  if(!j||!j.ok)return;
+  renderKline(j.data);
+}
+
+function renderKline(klines){
+  if(!chart)chart=echarts.init($("chart"));
+  const dates=klines.map(k=>k.date);
+  const volData=klines.map(k=>({value:k.volume,itemStyle:{color:k.close>=k.open?UP:DOWN}}));
+  const hasSub2 = STATE.sub2!=="none";
+
+  const series=[{
+    name:"K线",type:"candlestick",data:klines.map(k=>[k.open,k.close,k.low,k.high]),
+    xAxisIndex:0,yAxisIndex:0,
+    itemStyle:{color:UP,color0:DOWN,borderColor:UP,borderColor0:DOWN}
+  }];
+  // 主图指标叠加
+  mainOverlaySeries(klines).forEach(s=>series.push(s));
+  // 副图一：成交量 + 持仓量
+  series.push({name:"成交量",type:"bar",data:volData,xAxisIndex:1,yAxisIndex:1,barWidth:"60%"});
+  series.push({name:"持仓量",type:"line",data:klines.map(k=>k.position),showSymbol:false,lineStyle:{width:1.5,color:"#6f9fe8"},xAxisIndex:1,yAxisIndex:2});
+  // 副图二
+  sub2Series(klines).forEach(s=>series.push(s));
+
+  const option={
+    backgroundColor:"transparent",animation:false,legend:{show:false},
+    tooltip:{trigger:"axis",axisPointer:{type:"cross"},
+      formatter:function(ps){
+        if(!ps||!ps.length)return "";
+        let s="<b>"+(ps[0].axisValue!=null?ps[0].axisValue:"")+"</b><br/>";
+        const k=klines[ps[0].dataIndex];
+        if(k){ s+="开 "+nf(k.open)+" 高 "+nf(k.high)+" 低 "+nf(k.low)+" 收 "+nf(k.close)+"<br/>成交量 "+big(k.volume)+" · 持仓 "+big(k.position); }
+        ps.forEach(p=>{ if(p.seriesName && p.seriesName!=="K线" && p.value!=null){ s+=p.marker+p.seriesName+" "+(typeof p.value==="object"?p.value.value:Number(p.value).toFixed(2))+"<br/>"; }});
+        return s;
+      }},
+    axisPointer:{link:[{xAxisIndex:"all"}]},
+    grid:[
+      {left:64,right:70,top:"5%",height:"43%"},
+      {left:64,right:70,top:"52%",height:"15%"},
+      {left:64,right:70,top:"72%",height:"18%"}
+    ],
+    xAxis:[
+      {type:"category",data:dates,gridIndex:0,axisLabel:{show:false},axisLine:{lineStyle:{color:"#2a3a55"}},axisTick:{show:false}},
+      {type:"category",data:dates,gridIndex:1,axisLabel:{show:false},axisLine:{lineStyle:{color:"#2a3a55"}},axisTick:{show:false}},
+      {type:"category",data:dates,gridIndex:2,axisLabel:{color:"#8fa1bb",fontSize:11},axisLine:{lineStyle:{color:"#2a3a55"}},axisTick:{show:false}}
+    ],
+    yAxis:[
+      {scale:true,gridIndex:0,splitLine:{lineStyle:{color:"#1d2940"}},axisLabel:{color:"#8fa1bb"}},
+      {gridIndex:1,splitLine:{show:false},axisLabel:{color:"#8fa1bb"},name:"量"},
+      {gridIndex:1,splitLine:{show:false},axisLabel:{color:"#6f9fe8"},name:"仓",position:"right"},
+      {scale:true,gridIndex:2,splitLine:{lineStyle:{color:"#1d2940"}},axisLabel:{color:"#8fa1bb"}}
+    ],
+    dataZoom:[
+      {type:"inside",xAxisIndex:[0,1,2],start:0,end:100},
+      {type:"slider",xAxisIndex:[0,1,2],start:0,end:100,bottom:0,height:18,borderColor:"#2a3a55",backgroundColor:"#131b2b",fillerColor:"rgba(63,169,245,.12)",textStyle:{color:"#8fa1bb"}}
+    ],
+    series:series
+  };
+  const total=dates.length;
+  if(total>160){ const st=Math.round((1-160/total)*100); option.dataZoom[0].start=st; option.dataZoom[1].start=st; }
+  chart.setOption(option,true);
+}
+
+/* =====================================================================
+   分时图（从夜盘21:00起算，含均价线；数据由后端 /api/line 提供）
+===================================================================== */
+function buildLineTime(start,duration){
+  // 生成从 start 起、共 duration 分钟的 "HH:MM" 时间标签（新浪分时横轴完整时段）
+  const p=start.split(":"); let h=+p[0],m=+p[1]; const a=[];
+  for(let i=0;i<duration;i++){
+    a.push(("0"+h).slice(-2)+":"+("0"+m).slice(-2));
+    if(++m===60){m=0;h++;}
+  }
+  return a;
+}
+function timeMin(t){
+  // "HH:MM" -> 当日分钟数；凌晨(<09)视为次日(+1440)，与后端一致
+  const h=+t.slice(0,2),m=+t.slice(3,5);
+  return (h<9?1440:0)+h*60+m;
+}
+async function loadLine(){
+  const j=await api("/api/line?symbol="+STATE.symbol);
+  if(!j||!j.ok||!j.data||!j.data.length)return;
+  const day=j.data;
+  // 横轴：完整交易时段，当前时刻之后留白（新浪风格）
+  const duration=j.duration||day.length;
+  const start=j.start||day[0].date.slice(11,16);
+  const labels=buildLineTime(start,duration);
+  const smin=timeMin(start);
+  const price=new Array(duration).fill(null);
+  const avg=new Array(duration).fill(null);
+  const vol=new Array(duration).fill(null);
+  const byIdx=new Array(duration).fill(null);
+  day.forEach(b=>{
+    const idx=timeMin(b.date.slice(11,16))-smin;
+    if(idx<0||idx>=duration)return;
+    price[idx]=b.close; avg[idx]=b.avg; byIdx[idx]=b;
+    vol[idx]={value:b.volume,itemStyle:{color:b.close>=b.open?UP:DOWN}};
+  });
+  // 纵轴：以昨结算价为对称中心上下自适应（新浪核心），曲线始终居中
+  const hs=day.map(b=>b.high).filter(v=>v!=null);
+  const ls=day.map(b=>b.low).filter(v=>v!=null);
+  const hi=hs.length?Math.max(...hs):null, lo=ls.length?Math.min(...ls):null;
+  const base=(j.base!=null)?j.base:null;
+  let yMin=null,yMax=null;
+  if(base!=null&&hi!=null&&lo!=null){
+    let dev=Math.max(Math.abs(hi-base),Math.abs(base-lo))*1.08;
+    if(!(dev>0))dev=(base||1)*0.003;
+    yMin=base-dev; yMax=base+dev;
+  }
+  const yAxis0={gridIndex:0,splitLine:{lineStyle:{color:"#1d2940"}},axisLabel:{color:"#8fa1bb"}};
+  if(yMin!=null&&yMax!=null){ yAxis0.min=yMin; yAxis0.max=yMax; yAxis0.scale=false; }
+  if(!chart)chart=echarts.init($("chart"));
+  const option={
+    backgroundColor:"transparent",animation:false,
+    tooltip:{trigger:"axis",axisPointer:{type:"cross"},
+      formatter:function(ps){
+        const b=byIdx[ps[0]?ps[0].dataIndex:0];
+        if(!b)return "";
+        return "<b>"+(labels[ps[0].dataIndex]||"")+"</b><br/>价 "+nf(b.close)+" · 开 "+nf(b.open)+" 高 "+nf(b.high)+" 低 "+nf(b.low)+"<br/>量 "+big(b.volume)+" · 持仓 "+big(b.position);
+      }},
+    grid:[
+      {left:64,right:20,top:"5%",height:"60%"},
+      {left:64,right:20,top:"69%",height:"20%"}
+    ],
+    xAxis:[
+      {type:"category",data:labels,gridIndex:0,axisLabel:{show:false},axisLine:{lineStyle:{color:"#2a3a55"}}},
+      {type:"category",data:labels,gridIndex:1,axisLabel:{color:"#8fa1bb",fontSize:11,interval:function(idx){const mm=labels[idx];return !mm||idx===0||idx===labels.length-1||mm.slice(3,5)==="00";}},axisLine:{lineStyle:{color:"#2a3a55"}}}
+    ],
+    yAxis:[yAxis0,{gridIndex:1,splitLine:{show:false},axisLabel:{color:"#8fa1bb"}}],
+    dataZoom:[{type:"inside",xAxisIndex:[0,1]},{type:"slider",xAxisIndex:[0,1],bottom:0,height:18,borderColor:"#2a3a55",backgroundColor:"#131b2b",fillerColor:"rgba(63,169,245,.12)",textStyle:{color:"#8fa1bb"}}],
+    series:[
+      {name:"价格",type:"line",data:price,showSymbol:false,lineStyle:{width:1.6,color:"#3fa9f5"},areaStyle:{color:"rgba(63,169,245,.12)"},xAxisIndex:0,yAxisIndex:0,
+        markLine:(base!=null)?{symbol:"none",data:[{yAxis:base,lineStyle:{color:"#6b7a94",type:"dashed"},label:{formatter:"昨结算 "+nf(base),color:"#8fa1bb",position:"end",fontSize:10}}]}:{}},
+      {name:"均价",type:"line",data:avg,showSymbol:false,lineStyle:{width:1.2,color:"#f5c542"},xAxisIndex:0,yAxisIndex:0},
+      {name:"成交量",type:"bar",data:vol,barWidth:"60%",xAxisIndex:1,yAxisIndex:1}
+    ]
+  };
+  chart.setOption(option,true);
+}
+
+/* =====================================================================
+   定时器 / 事件
+===================================================================== */
+function restartTimers(){
+  clearInterval(quoteTimer); clearInterval(chartTimer);
+  quoteTimer=setInterval(()=>{ if(STATE.auto) loadQuote(); },5000);
+  chartTimer=setInterval(()=>{ if(STATE.auto) loadChart(); },60000);
+}
+$("btnRefresh").onclick=()=>{ loadQuote(); loadChart(); loadContracts(); };
+$("btnAuto").onclick=function(){ STATE.auto=!STATE.auto; this.textContent="自动刷新："+(STATE.auto?"开":"关"); };
+window.addEventListener("resize",()=>{ if(chart)chart.resize(); });
+
+/* =====================================================================
+   启动
+===================================================================== */
+(async function init(){
+  buildControls();
+  chart=echarts.init($("chart"));
+  await buildVarietySelect();
+  await loadContracts();
+  updateHead();
+  await Promise.all([loadQuote(),loadChart()]);
+  restartTimers();
+})();
+</script>
+</body>
+</html>
